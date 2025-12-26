@@ -7,7 +7,7 @@ Shared configuration files for projects.
 Install this package as a dev dependency in your project:
 
 ```bash
-npm install --save-dev @kurkle/configs
+npm install --save-dev @biomejs/biome @kurkle/configs
 ```
 
 ## Usage

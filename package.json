@@ -2,7 +2,7 @@
   "name": "@kurkle/configs",
   "version": "1.0.0",
   "description": "Shared configs for projects",
-  "devDependencies": {
+  "peerDependencies": {
     "@biomejs/biome": "^2.3.10"
   }
 }
