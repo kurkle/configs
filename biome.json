@@ -24,7 +24,12 @@
         "noDelete": "off"
       },
       "style": {
-        "useImportType": "error"
+        "useImportType": {
+          "level": "error",
+          "options": {
+            "style": "separatedType"
+          }
+        }
       }
     }
   },
