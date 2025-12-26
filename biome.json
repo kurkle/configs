@@ -65,5 +65,10 @@
       "semicolons": "asNeeded"
     },
     "globals": ["browser", "node", "jasmine"]
+  },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
   }
 }
