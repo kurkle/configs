@@ -1,9 +1,46 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
+  "$schema": "https://biomejs.dev/schemas/latest/schema.json",
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              { "type": true },
+              ":BLANK_LINE:",
+              { "source": ":PACKAGE:", "type": false },
+              ":BLANK_LINE:",
+              { "source": [":PATH:"], "type": false }
+            ]
+          }
+        },
+        "useSortedAttributes": "on",
+        "useSortedKeys": "on",
+        "useSortedProperties": "on"
+      }
+    },
+    "enabled": true
+  },
+  "formatter": {
+    "attributePosition": "auto",
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded",
+      "trailingCommas": "es5"
+    },
+    "globals": ["browser", "node", "jasmine"]
+  },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
       "complexity": {
         "noExcessiveCognitiveComplexity": {
           "level": "warn",
@@ -16,13 +53,10 @@
         "noUnusedImports": "error",
         "noUnusedVariables": "error"
       },
-      "suspicious": {
-        "noExplicitAny": "off",
-        "noRedeclare": "off"
-      },
       "performance": {
         "noDelete": "off"
       },
+      "recommended": true,
       "style": {
         "useImportType": {
           "level": "error",
@@ -30,50 +64,16 @@
             "style": "separatedType"
           }
         }
+      },
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noRedeclare": "off"
       }
     }
-  },
-  "assist": {
-    "enabled": true,
-    "actions": {
-      "source": {
-        "useSortedKeys": "on",
-        "useSortedAttributes": "on",
-        "useSortedProperties": "on",
-        "organizeImports": {
-          "level": "on",
-          "options": {
-            "groups": [
-              { "type": true },
-              ":BLANK_LINE:",
-              { "type": false, "source": ":PACKAGE:" },
-              ":BLANK_LINE:",
-              { "type": false, "source": [":PATH:"] }
-            ]
-          }
-        }
-      }
-    }
-  },
-  "formatter": {
-    "enabled": true,
-    "indentStyle": "space",
-    "indentWidth": 2,
-    "lineEnding": "lf",
-    "lineWidth": 100,
-    "attributePosition": "auto"
-  },
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "single",
-      "trailingCommas": "es5",
-      "semicolons": "asNeeded"
-    },
-    "globals": ["browser", "node", "jasmine"]
   },
   "vcs": {
-    "enabled": true,
     "clientKind": "git",
+    "enabled": true,
     "useIgnoreFile": true
   }
 }
