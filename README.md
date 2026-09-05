@@ -73,7 +73,15 @@ not need rather than forking the workflow.
 | `run-sonar` | `true` | Run the SonarCloud scan. |
 | `run-audit-signatures` | `false` | Verify provenance attestations and registry signatures. |
 
-`secrets: inherit` is required whenever `run-sonar` is on, so the scan gets `SONAR_TOKEN`.
+A caller with `run-sonar` on needs to get `SONAR_TOKEN` to the scan, either with
+`secrets: inherit` or, preferred, by naming it explicitly:
+
+```yaml
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+```
+
+A repository with `run-sonar: false` needs no `secrets:` block at all.
 
 ### Versioning
 
