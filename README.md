@@ -106,6 +106,7 @@ One-time copies for a new or migrating repository:
 | --- | --- |
 | `templates/editorconfig` | `.editorconfig` |
 | `templates/releaserc.json` | `.releaserc.json` |
+| `templates/dependabot.yml` | `.github/dependabot.yml` |
 | `templates/githooks/*` | `.githooks/` (or use `npx kurkle-install-hooks`) |
 
 ## TypeScript
