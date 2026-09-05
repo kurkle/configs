@@ -79,6 +79,10 @@ on:
         required: false
         type: boolean
         default: false
+    secrets:
+      SONAR_TOKEN:
+        description: Token for the SonarCloud scan. Required only when run-sonar is true.
+        required: false
 
 permissions:
   contents: read
@@ -165,7 +169,7 @@ jobs:
 
       - name: Set version
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
           if [ -z "$VERSION" ]; then
