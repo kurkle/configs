@@ -1,0 +1,180 @@
+name: Shared CI
+
+# Reusable CI for kurkle projects.
+#
+#   jobs:
+#     shared-ci:
+#       uses: kurkle/configs/.github/workflows/shared-ci.yml@v1
+#       with:
+#         fetch-depth: 0
+#         run-audit-signatures: true
+#       secrets: inherit
+#
+# Every step is opt-out: a repository that has no typecheck, no build or no
+# browser tests turns those inputs off instead of forking the workflow.
+
+on:
+  workflow_call:
+    inputs:
+      fetch-depth:
+        description: Checkout depth. Use 0 for release runs and Sonar analysis.
+        required: false
+        type: number
+        default: 0
+      node-version:
+        description: Node.js version used for every job.
+        required: false
+        type: string
+        default: '24'
+      install-command:
+        description: Command that installs dependencies.
+        required: false
+        type: string
+        default: npm clean-install
+      run-lint:
+        description: Run `npm run lint`.
+        required: false
+        type: boolean
+        default: true
+      run-typecheck:
+        description: Run `npm run typecheck`.
+        required: false
+        type: boolean
+        default: true
+      run-build:
+        description: Run `npm run build`.
+        required: false
+        type: boolean
+        default: true
+      test-command:
+        description: Command that runs the tests. Empty string skips testing.
+        required: false
+        type: string
+        default: npm test
+      browser-tests:
+        description: Run the test command under xvfb, for karma browser tests.
+        required: false
+        type: boolean
+        default: true
+      extra-command:
+        description: Optional command run after the tests, e.g. `npm run pack:check`.
+        required: false
+        type: string
+        default: ''
+      coverage-paths:
+        description: Newline separated lcov paths to upload. Empty string skips the upload.
+        required: false
+        type: string
+        default: |
+          coverage/chrome/lcov.info
+          coverage/firefox/lcov.info
+          coverage/unit/lcov.info
+      run-sonar:
+        description: Run the SonarCloud scan. Skipped on forks and for dependabot.
+        required: false
+        type: boolean
+        default: true
+      run-audit-signatures:
+        description: Verify provenance attestations and registry signatures.
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: ${{ inputs.fetch-depth }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Lint
+        if: ${{ inputs.run-lint }}
+        run: npm run lint
+
+      - name: Typecheck
+        if: ${{ inputs.run-typecheck }}
+        run: npm run typecheck
+
+      - name: Build
+        if: ${{ inputs.run-build }}
+        run: npm run build
+
+      - name: Test
+        if: ${{ inputs.test-command != '' }}
+        shell: bash
+        run: |
+          if [ "${{ inputs.browser-tests }}" = "true" ]; then
+            xvfb-run --auto-servernum ${{ inputs.test-command }}
+          else
+            ${{ inputs.test-command }}
+          fi
+
+      - name: Extra command
+        if: ${{ inputs.extra-command != '' }}
+        run: ${{ inputs.extra-command }}
+
+      - name: Upload coverage reports
+        if: ${{ inputs.coverage-paths != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-reports
+          path: ${{ inputs.coverage-paths }}
+
+      - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
+        if: ${{ inputs.run-audit-signatures }}
+        run: npm audit signatures
+
+  sonar:
+    name: Sonar
+    if: ${{ inputs.run-sonar && github.event.pull_request.head.repo.fork != true && github.actor != 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    needs: [ci]
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+
+      - name: Download coverage reports
+        if: ${{ inputs.coverage-paths != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-reports
+          path: coverage
+
+      - name: Set version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          if [ -z "$VERSION" ]; then
+            echo "No release found, leaving sonar.projectVersion unset"
+            exit 0
+          fi
+          echo -e "\nsonar.projectVersion=$VERSION" >> sonar-project.properties
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

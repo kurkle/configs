@@ -1,0 +1,22 @@
+name: PR CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  shared-ci:
+    uses: ./.github/workflows/shared-ci.yml
+    with:
+      fetch-depth: 1
+      run-audit-signatures: false
+      run-typecheck: false
+      run-build: false
+      test-command: ''
+      browser-tests: false
+      coverage-paths: ''
+      run-sonar: false
+    secrets: inherit

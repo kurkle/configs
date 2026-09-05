@@ -1,5 +1,8 @@
 {
   "author": "Jukka Kurkela",
+  "bin": {
+    "kurkle-install-hooks": "./bin/install-hooks.mjs"
+  },
   "bugs": {
     "url": "https://github.com/kurkle/configs/issues"
   },
@@ -9,9 +12,19 @@
   },
   "files": [
     "README.md",
-    "biome.json"
+    "biome.json",
+    "bin",
+    "templates",
+    "tsconfig.base.json"
   ],
   "homepage": "https://github.com/kurkle/configs/",
+  "keywords": [
+    "biome",
+    "config",
+    "github-actions",
+    "githooks",
+    "tsconfig"
+  ],
   "license": "MIT",
   "name": "@kurkle/configs",
   "peerDependencies": {
@@ -22,7 +35,9 @@
     "url": "git+https://github.com/kurkle/configs.git"
   },
   "scripts": {
+    "format": "biome check --write",
     "lint": "biome check",
+    "prepare": "git config core.hooksPath .githooks || true",
     "release": "semantic-release"
   },
   "version": "0.0.0-development"
