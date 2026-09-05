@@ -1,5 +1,9 @@
 # @kurkle/configs
 
+[![npm](https://img.shields.io/npm/v/@kurkle/configs.svg)](https://www.npmjs.com/package/@kurkle/configs)
+[![release](https://img.shields.io/github/release/kurkle/configs.svg?style=flat-square)](https://github.com/kurkle/configs/releases/latest)
+![GitHub](https://img.shields.io/github/license/kurkle/configs.svg)
+
 Shared configuration for kurkle projects: a Biome config, a reusable GitHub Actions
 workflow, git hooks, and the templates every repository starts from.
 
