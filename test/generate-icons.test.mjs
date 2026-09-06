@@ -2,6 +2,8 @@ import {
   computeMaskablePadding,
   formatCliError,
   generate,
+  HELP_TEXT,
+  isRunningAsMain,
   loadRenderers,
   MissingDependencyError,
   main,
@@ -10,10 +12,11 @@ import {
   resolveBackground,
 } from '../bin/generate-icons.mjs'
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { pathToFileURL } from 'node:url'
 
 async function withTempDir(run) {
   const dir = await mkdtemp(path.join(tmpdir(), 'kurkle-generate-icons-'))
@@ -38,14 +41,15 @@ function captureLogs() {
 
 // parseArgs
 
-test('parseArgs defaults to docs/public with no background override', () => {
-  assert.deepEqual(parseArgs([]), { background: undefined, dir: 'docs/public' })
+test('parseArgs defaults to docs/public with no background override and help off', () => {
+  assert.deepEqual(parseArgs([]), { background: undefined, dir: 'docs/public', help: false })
 })
 
 test('parseArgs reads --dir as a separate argument', () => {
   assert.deepEqual(parseArgs(['--dir', 'assets/site']), {
     background: undefined,
     dir: 'assets/site',
+    help: false,
   })
 })
 
@@ -53,6 +57,7 @@ test('parseArgs reads --dir=value', () => {
   assert.deepEqual(parseArgs(['--dir=assets/site']), {
     background: undefined,
     dir: 'assets/site',
+    help: false,
   })
 })
 
@@ -60,6 +65,7 @@ test('parseArgs reads --background as a separate argument', () => {
   assert.deepEqual(parseArgs(['--background', '#112233']), {
     background: '#112233',
     dir: 'docs/public',
+    help: false,
   })
 })
 
@@ -67,6 +73,7 @@ test('parseArgs reads --background=value, including a value containing "="', () 
   assert.deepEqual(parseArgs(['--background=#112233']), {
     background: '#112233',
     dir: 'docs/public',
+    help: false,
   })
 })
 
@@ -74,11 +81,19 @@ test('parseArgs reads both flags together, in either order', () => {
   assert.deepEqual(parseArgs(['--background', '#fff', '--dir', 'out']), {
     background: '#fff',
     dir: 'out',
+    help: false,
   })
   assert.deepEqual(parseArgs(['--dir=out', '--background=#fff']), {
     background: '#fff',
     dir: 'out',
+    help: false,
   })
+})
+
+test('parseArgs recognizes --help and -h', () => {
+  assert.equal(parseArgs(['--help']).help, true)
+  assert.equal(parseArgs(['-h']).help, true)
+  assert.equal(parseArgs(['--dir', 'out', '--help']).help, true)
 })
 
 // readSourceSvg
@@ -236,6 +251,23 @@ test('main propagates a MissingDependencyError once past argument parsing and re
       process.argv = originalArgv
     }
   })
+})
+
+test('main prints usage and returns on --help instead of trying to generate icons', async () => {
+  // Regression: unrecognized flags used to be ignored silently, so --help
+  // fell through to parseArgs' defaults and main() went on to look for
+  // docs/public/favicon.svg - which does not exist here, so this would have
+  // rejected instead of printing usage and returning cleanly.
+  const originalArgv = process.argv
+  process.argv = ['node', 'generate-icons.mjs', '--help']
+  const log = captureLogs()
+  try {
+    await main()
+    assert.ok(log.lines.some((line) => line === HELP_TEXT))
+  } finally {
+    process.argv = originalArgv
+    log.restore()
+  }
 })
 
 // generate
@@ -420,6 +452,61 @@ test('generate logs one write line per file, naming maskable renders as such', a
       log.lines.some((line) => line.includes('favicon-96x96.png') && !line.includes('maskable'))
     )
     assert.ok(log.lines.some((line) => line.includes('favicon.ico (16/32/48)')))
+  })
+})
+
+// isRunningAsMain
+//
+// The full regression this is fixing - the guard silently no-opping when
+// run through a node_modules/.bin symlink, exactly how npm installs this
+// command - is covered end-to-end with a real subprocess and a real symlink
+// in test/generate-icons-entrypoint.test.mjs. These are the fast unit-level
+// edge cases for the comparison itself.
+
+test('isRunningAsMain matches through a real symlink, via realpath', async () => {
+  await withTempDir(async (dir) => {
+    const scriptPath = path.join(dir, 'script.mjs')
+    await writeFile(scriptPath, '')
+    const symlinkPath = path.join(dir, 'symlinked-entry')
+    await symlink(scriptPath, symlinkPath)
+
+    assert.equal(isRunningAsMain(pathToFileURL(scriptPath).href, symlinkPath), true)
+  })
+})
+
+test('isRunningAsMain matches when argv[1] is the same path directly, no symlink involved', async () => {
+  await withTempDir(async (dir) => {
+    const scriptPath = path.join(dir, 'script.mjs')
+    await writeFile(scriptPath, '')
+
+    assert.equal(isRunningAsMain(pathToFileURL(scriptPath).href, scriptPath), true)
+  })
+})
+
+test('isRunningAsMain does not match a different file', async () => {
+  await withTempDir(async (dir) => {
+    const scriptPath = path.join(dir, 'script.mjs')
+    const otherPath = path.join(dir, 'other.mjs')
+    await writeFile(scriptPath, '')
+    await writeFile(otherPath, '')
+
+    assert.equal(isRunningAsMain(pathToFileURL(scriptPath).href, otherPath), false)
+  })
+})
+
+test('isRunningAsMain returns false, not throw, when argv[1] is missing', () => {
+  assert.equal(isRunningAsMain(pathToFileURL('/anything').href, undefined), false)
+})
+
+test('isRunningAsMain returns false, not throw, when argv[1] points at nothing', async () => {
+  await withTempDir(async (dir) => {
+    const scriptPath = path.join(dir, 'script.mjs')
+    await writeFile(scriptPath, '')
+
+    assert.equal(
+      isRunningAsMain(pathToFileURL(scriptPath).href, path.join(dir, 'does-not-exist')),
+      false
+    )
   })
 })
 
