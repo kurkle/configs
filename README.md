@@ -89,6 +89,61 @@ Consumers pin the floating major tag `@v1`. `main-ci.yml` moves that tag to ever
 from `main`, so a patch release reaches all repositories without a pull request in each one. Pin
 an exact tag such as `@v1.2.0` instead when a repository needs to hold back.
 
+## Docs deploy workflow
+
+`docs-deploy.yml` is a second, separate reusable workflow that promotes a just-published
+release's docs to Cloudflare Pages production. It is not a job inside `shared-ci.yml`, because
+shared-ci runs for both pull requests and ordinary pushes to `main`, while this only ever belongs
+after an actual release; and it is not folded into a repository's own `release` job either,
+because that job's workflow **file name** is load-bearing — npm's trusted publishing binds the
+publisher identity to the exact workflow file (`main-ci.yml`) that runs `npx semantic-release`, and
+moving that call into a called workflow changes the identity and breaks npm publishing fleet-wide.
+Only the two Cloudflare steps move; nothing that touches npm does.
+
+Call it from the `release` job's workflow, as a job of its own that needs `release`:
+
+```yaml
+  docs-deploy:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    uses: kurkle/configs/.github/workflows/docs-deploy.yml@v1
+    with:
+      version: ${{ needs.release.outputs.version }}
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_PAGES_PROJECT: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+      CLOUDFLARE_PAGES_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK }}
+```
+
+Secrets are named explicitly rather than `secrets: inherit`, the same reasoning as `SONAR_TOKEN`
+above — least exposure, since `secrets: inherit` hands this workflow every secret the caller has,
+including `NPM_TOKEN` where one exists. `secrets: inherit` still works if a repository prefers it;
+`workflow_call.secrets` in `docs-deploy.yml` declares the four names either way, since an explicit
+`secrets:` block in a caller is only valid for names the called workflow has declared.
+
+| Input | Purpose |
+| --- | --- |
+| `version` | Released version without the leading `v`, e.g. `1.2.3`. |
+
+This depends on `needs.release.outputs.released` and `needs.release.outputs.version`, which the
+`release` job does not publish as **job** outputs by default — only as outputs of its own
+`release-version` step. A repository adopting `docs-deploy.yml` needs both of these changes to its
+`release` job, in addition to adding the `docs-deploy` job above:
+
+1. Add a job-level `outputs:` block (next to `permissions:`, before `steps:`):
+
+   ```yaml
+       outputs:
+         released: ${{ steps.release-version.outputs.released }}
+         version: ${{ steps.release-version.outputs.version }}
+   ```
+
+2. Remove the `Update Cloudflare Pages production docs version` and
+   `Trigger Cloudflare Pages production deploy` steps — they moved into `docs-deploy.yml`. The
+   `Resolve released version` step (`id: release-version`) stays; it reads the git tag and belongs
+   with the release itself, not the deploy.
+
 ## Git hooks
 
 ```bash

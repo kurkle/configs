@@ -1,0 +1,87 @@
+name: Docs Deploy
+
+# Reusable workflow that promotes a just-published release's docs to
+# Cloudflare Pages production. Kept separate from shared-ci.yml (rather than
+# a job added there) because shared-ci runs in both PR and main-push
+# contexts and this only ever belongs after an actual release; and kept
+# separate from the caller's own release job (rather than pulling the whole
+# job in here) because that job's workflow FILE NAME is load-bearing - npm's
+# trusted publishing binds the publisher identity to the exact workflow file
+# (main-ci.yml) that runs `npx semantic-release`, and moving that call into a
+# called workflow changes the identity and breaks npm publishing fleet-wide.
+# Only the two Cloudflare steps move here; nothing that touches npm.
+#
+#   jobs:
+#     docs-deploy:
+#       needs: release
+#       if: needs.release.outputs.released == 'true'
+#       uses: kurkle/configs/.github/workflows/docs-deploy.yml@v1
+#       with:
+#         version: ${{ needs.release.outputs.version }}
+#       secrets:
+#         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+#         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+#         CLOUDFLARE_PAGES_PROJECT: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+#         CLOUDFLARE_PAGES_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK }}
+#
+# The caller's release job must publish `released` and `version` as JOB
+# outputs (not just the `release-version` step's own outputs) for
+# `needs.release.outputs.*` above to resolve - see the README for the exact
+# change a caller needs to make.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Released version without the leading v, e.g. 1.2.3.
+        required: true
+        type: string
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      CLOUDFLARE_PAGES_PROJECT:
+        required: true
+      CLOUDFLARE_PAGES_DEPLOY_HOOK:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs-deploy:
+    name: Docs Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update Cloudflare Pages production docs version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+          DOCS_VERSION: ${{ inputs.version }}
+        run: |
+          curl --fail --silent --show-error \
+            --request PATCH \
+            --url "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${CLOUDFLARE_PAGES_PROJECT}" \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header 'Content-Type: application/json' \
+            --data @- <<EOF
+          {
+            "deployment_configs": {
+              "production": {
+                "env_vars": {
+                  "DOCS_VERSION": {
+                    "type": "plain_text",
+                    "value": "${DOCS_VERSION}"
+                  }
+                }
+              }
+            }
+          }
+          EOF
+
+      - name: Trigger Cloudflare Pages production deploy
+        env:
+          CLOUDFLARE_PAGES_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK }}
+        run: curl --fail --silent --show-error --request POST "$CLOUDFLARE_PAGES_DEPLOY_HOOK"
