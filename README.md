@@ -110,6 +110,45 @@ Copies `commit-msg` (semantic commit subject check) and `pre-commit` into `.gith
 The `pre-commit` hook runs lint, test, typecheck, build and docs with `--if-present`, so the same
 hook works in every repository regardless of which scripts it defines.
 
+## Icons
+
+```bash
+npx kurkle-generate-icons
+```
+
+Reads `docs/public/favicon.svg` and writes the full favicon / PWA icon set next to it:
+`favicon.ico` (16/32/48), `favicon-96x96.png`, `apple-touch-icon.png` (180x180), and the two
+maskable icons `web-app-manifest-192x192.png` and `web-app-manifest-512x512.png`. The maskable pair
+is rendered into an 80% safe zone (`MASKABLE_SAFE_ZONE`, fixed fleet-wide) so the mark survives
+being cropped to a circle/squircle by the platform.
+
+Requires `sharp` and `png-to-ico`, both optional peer dependencies — install them in any repository
+that runs the command:
+
+```bash
+npm install --save-dev sharp png-to-ico
+```
+
+Running the command without them prints which packages are missing instead of a raw
+`ERR_MODULE_NOT_FOUND`.
+
+Wire it into `package.json`:
+
+```json
+{
+  "scripts": {
+    "icons": "kurkle-generate-icons"
+  }
+}
+```
+
+Options:
+
+| Flag | Default | Purpose |
+| --- | --- | --- |
+| `--dir <path>` | `docs/public` | Directory holding `favicon.svg`, and where the generated files are written. Relative to the current working directory. |
+| `--background <color>` | `background_color` from `<dir>/site.webmanifest`, else `#ffffff` | Fill color for the maskable safe-zone margin. The manifest is the source of truth when present, since platforms use the same value as the icon's backdrop; pass the flag to override it, or when there is no manifest. |
+
 ## Templates
 
 One-time copies for a new or migrating repository:
