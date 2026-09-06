@@ -27,10 +27,14 @@ on:
         type: string
         default: '24'
       install-command:
-        description: Command that installs dependencies.
+        description: >-
+          Command that installs dependencies. Defaults to skipping dependency
+          lifecycle scripts (--ignore-scripts), since a compromised
+          transitive dependency's install script is a common malware vector;
+          override if a repository actually needs them.
         required: false
         type: string
-        default: npm clean-install
+        default: npm clean-install --ignore-scripts
       run-lint:
         description: Run `npm run lint`.
         required: false

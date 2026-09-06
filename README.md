@@ -62,7 +62,7 @@ not need rather than forking the workflow.
 | --- | --- | --- |
 | `fetch-depth` | `0` | Checkout depth. Use `1` for pull requests. |
 | `node-version` | `'24'` | Node.js version for every job. |
-| `install-command` | `npm clean-install` | Dependency install command. |
+| `install-command` | `npm clean-install --ignore-scripts` | Dependency install command. Scripts are off by default since a compromised dependency's install script is a common malware vector; override if a repository needs them. |
 | `run-lint` | `true` | Run `npm run lint`. |
 | `run-typecheck` | `true` | Run `npm run typecheck`. |
 | `run-build` | `true` | Run `npm run build`. |
