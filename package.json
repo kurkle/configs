@@ -1,6 +1,7 @@
 {
   "author": "Jukka Kurkela",
   "bin": {
+    "kurkle-generate-icons": "./bin/generate-icons.mjs",
     "kurkle-install-hooks": "./bin/install-hooks.mjs"
   },
   "bugs": {
@@ -26,12 +27,23 @@
     "config",
     "github-actions",
     "githooks",
+    "icons",
     "tsconfig"
   ],
   "license": "MIT",
   "name": "@kurkle/configs",
   "peerDependencies": {
-    "@biomejs/biome": "^2.3.10"
+    "@biomejs/biome": "^2.3.10",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.4"
+  },
+  "peerDependenciesMeta": {
+    "png-to-ico": {
+      "optional": true
+    },
+    "sharp": {
+      "optional": true
+    }
   },
   "repository": {
     "type": "git",
