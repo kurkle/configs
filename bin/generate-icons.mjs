@@ -32,6 +32,7 @@
  * full-bleed as before — shrinking those too would just make the mark
  * smaller for no reason, since nothing masks them.
  */
+import { realpathSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -58,8 +59,26 @@ const pngTargets = [
 
 const icoSizes = [16, 32, 48]
 
+export const HELP_TEXT = `Usage: kurkle-generate-icons [options]
+
+Generates favicon.ico (16/32/48), favicon-96x96.png, apple-touch-icon.png
+(180x180), and the two maskable web-app-manifest-*.png icons from
+<dir>/favicon.svg.
+
+Options:
+  --dir <path>          Directory holding favicon.svg, and where generated
+                         files are written (default: docs/public)
+  --background <color>  Fill color for the maskable safe-zone margin
+                         (default: background_color from <dir>/site.webmanifest,
+                         else #ffffff)
+  --help, -h             Show this help and exit
+`
+
+// Unrecognized flags used to be ignored silently, so --help fell through to
+// parseArgs' defaults and main() went ahead and tried to generate icons
+// instead of showing usage.
 export function parseArgs(argv) {
-  const args = { background: undefined, dir: 'docs/public' }
+  const args = { background: undefined, dir: 'docs/public', help: false }
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
@@ -69,6 +88,8 @@ export function parseArgs(argv) {
       args.dir = inlineValue ?? argv[++i]
     } else if (flag === '--background') {
       args.background = inlineValue ?? argv[++i]
+    } else if (flag === '--help' || flag === '-h') {
+      args.help = true
     }
   }
 
@@ -214,7 +235,13 @@ export async function generate({ background, pngToIco, publicDir, sharp, svgBuff
 }
 
 export async function main() {
-  const { background, dir } = parseArgs(process.argv.slice(2))
+  const { background, dir, help } = parseArgs(process.argv.slice(2))
+
+  if (help) {
+    console.log(HELP_TEXT)
+    return
+  }
+
   const publicDir = path.resolve(process.cwd(), dir)
 
   const svgBuffer = await readSourceSvg(publicDir)
@@ -223,7 +250,28 @@ export async function main() {
   await generate({ background, pngToIco, publicDir, sharp, svgBuffer })
 }
 
-const isMain = process.argv[1] === fileURLToPath(import.meta.url)
+// npm installs bin commands as POSIX symlinks
+// (node_modules/.bin/kurkle-generate-icons -> ../@kurkle/configs/bin/generate-icons.mjs).
+// When Node runs a script through a symlink, process.argv[1] stays the
+// symlink's own path while import.meta.url resolves to the symlink's real
+// target, so comparing the raw strings never matches for exactly the way
+// this command is meant to be run - it would silently no-op every time. Both
+// sides go through realpathSync so the comparison survives the symlink.
+// argv[1] can be missing (REPL, `node -e`) and realpathSync throws on a path
+// that no longer exists; either case means "not running as main", not a
+// crash.
+export function isRunningAsMain(scriptUrl, argv1) {
+  if (!argv1) {
+    return false
+  }
+  try {
+    return realpathSync(argv1) === realpathSync(fileURLToPath(scriptUrl))
+  } catch {
+    return false
+  }
+}
+
+const isMain = isRunningAsMain(import.meta.url, process.argv[1])
 
 if (isMain) {
   try {

@@ -148,6 +148,7 @@ Options:
 | --- | --- | --- |
 | `--dir <path>` | `docs/public` | Directory holding `favicon.svg`, and where the generated files are written. Relative to the current working directory. |
 | `--background <color>` | `background_color` from `<dir>/site.webmanifest`, else `#ffffff` | Fill color for the maskable safe-zone margin. The manifest is the source of truth when present, since platforms use the same value as the icon's backdrop; pass the flag to override it, or when there is no manifest. |
+| `--help`, `-h` | — | Print usage and exit without generating anything. |
 
 ## Templates
 
