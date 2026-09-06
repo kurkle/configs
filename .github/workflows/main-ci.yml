@@ -44,7 +44,7 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
-        run: npm clean-install
+        run: npm clean-install --ignore-scripts
 
       - name: Release
         env:
