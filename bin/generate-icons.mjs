@@ -34,6 +34,7 @@
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // Fraction of the full canvas the artwork occupies in a maskable render.
 // 0.8 leaves a 10% margin on every edge, which is the safe-zone platforms
@@ -57,7 +58,7 @@ const pngTargets = [
 
 const icoSizes = [16, 32, 48]
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = { background: undefined, dir: 'docs/public' }
 
   for (let i = 0; i < argv.length; i++) {
@@ -74,9 +75,9 @@ function parseArgs(argv) {
   return args
 }
 
-class MissingDependencyError extends Error {}
+export class MissingDependencyError extends Error {}
 
-async function loadRenderers() {
+export async function loadRenderers() {
   try {
     const [{ default: sharp }, { default: pngToIco }] = await Promise.all([
       import('sharp'),
@@ -91,7 +92,7 @@ async function loadRenderers() {
   }
 }
 
-async function readSourceSvg(publicDir) {
+export async function readSourceSvg(publicDir) {
   const sourceSvg = path.join(publicDir, 'favicon.svg')
 
   try {
@@ -107,7 +108,7 @@ async function readSourceSvg(publicDir) {
   }
 }
 
-async function resolveBackground(publicDir, override) {
+export async function resolveBackground(publicDir, override) {
   if (override) {
     console.log(`using  background ${override} (from --background)`)
     return override
@@ -138,12 +139,37 @@ async function resolveBackground(publicDir, override) {
   return DEFAULT_MASKABLE_BACKGROUND
 }
 
-async function main() {
-  const { background, dir } = parseArgs(process.argv.slice(2))
-  const publicDir = path.resolve(process.cwd(), dir)
+// Pure arithmetic behind the maskable safe zone: how much of the canvas is
+// artwork (innerSize) versus background padding (before/after), split as
+// evenly as an odd margin allows. Kept separate from the sharp calls below
+// so the numbers themselves — the exact thing that regressed once already
+// (see the module doc comment) — are unit-testable without rasterizing
+// anything.
+export function computeMaskablePadding(size, safeZone = MASKABLE_SAFE_ZONE) {
+  const innerSize = Math.round(size * safeZone)
+  const margin = size - innerSize
+  const before = Math.floor(margin / 2)
+  const after = margin - before
+  return { after, before, innerSize }
+}
 
-  const svgBuffer = await readSourceSvg(publicDir)
-  const { pngToIco, sharp } = await loadRenderers()
+// Formats a caught error for the top-level CLI handler. A
+// MissingDependencyError's message is already user-facing; anything else
+// falls back to its message, or its string form if it has none (e.g. a
+// non-Error value was thrown).
+export function formatCliError(err) {
+  if (err instanceof MissingDependencyError) {
+    return err.message
+  }
+  return err.message ?? String(err)
+}
+
+// Orchestrates the actual rendering once everything main() needs (the
+// resolved directory, the SVG bytes, and the loaded sharp/pngToIco) is in
+// hand. Kept separate from main() so tests can drive it with a fake sharp/
+// pngToIco — verifying which files get written, in what order, and with what
+// padding — without asking sharp to rasterize anything for real.
+export async function generate({ background, pngToIco, publicDir, sharp, svgBuffer }) {
   const maskableBackground = await resolveBackground(publicDir, background)
 
   async function renderPng(size) {
@@ -151,10 +177,7 @@ async function main() {
   }
 
   async function renderMaskablePng(size) {
-    const innerSize = Math.round(size * MASKABLE_SAFE_ZONE)
-    const margin = size - innerSize
-    const before = Math.floor(margin / 2)
-    const after = margin - before
+    const { after, before, innerSize } = computeMaskablePadding(size)
 
     const artwork = await sharp(svgBuffer, { density: 300 })
       .resize(innerSize, innerSize)
@@ -190,11 +213,23 @@ async function main() {
   console.log(`write  favicon.ico (${icoSizes.join('/')})`)
 }
 
-main().catch((err) => {
-  if (err instanceof MissingDependencyError) {
-    console.error(`error  ${err.message}`)
-  } else {
-    console.error(`error  ${err.message ?? err}`)
+export async function main() {
+  const { background, dir } = parseArgs(process.argv.slice(2))
+  const publicDir = path.resolve(process.cwd(), dir)
+
+  const svgBuffer = await readSourceSvg(publicDir)
+  const { pngToIco, sharp } = await loadRenderers()
+
+  await generate({ background, pngToIco, publicDir, sharp, svgBuffer })
+}
+
+const isMain = process.argv[1] === fileURLToPath(import.meta.url)
+
+if (isMain) {
+  try {
+    await main()
+  } catch (err) {
+    console.error(`error  ${formatCliError(err)}`)
+    process.exitCode = 1
   }
-  process.exitCode = 1
-})
+}

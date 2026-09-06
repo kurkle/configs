@@ -53,7 +53,8 @@
     "format": "biome check --write",
     "lint": "biome check",
     "prepare": "git config core.hooksPath .githooks || true",
-    "release": "semantic-release"
+    "release": "semantic-release",
+    "test": "mkdir -p coverage/unit && node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/unit/lcov.info"
   },
   "version": "0.0.0-development"
 }
