@@ -89,6 +89,60 @@ Consumers pin the floating major tag `@v1`. `main-ci.yml` moves that tag to ever
 from `main`, so a patch release reaches all repositories without a pull request in each one. Pin
 an exact tag such as `@v1.2.0` instead when a repository needs to hold back.
 
+## Publish contract
+
+`kurkle-check-package` packs the package once and runs three checks against that one tarball:
+`attw`, `publint`, and a consumer that is compiled and then loaded.
+
+```json
+{
+  "scripts": {
+    "test:pack": "kurkle-check-package"
+  }
+}
+```
+
+`attw` and `publint` ship as dependencies of this package, so a repository needs neither in its
+own `devDependencies`, and the version is bumped in one place for the whole fleet.
+
+### Why the third check exists
+
+`attw` and `publint` check how a specifier *resolves* — does it resolve at all, and does the
+resolved file's module kind match the condition that pointed at it. Neither type-checks the
+shipped declarations against a consumer. A package can be green in both and still fail to
+compile:
+
+- a `declare module` augmentation inside a `.d.cts`, which resolves the augmented specifier in
+  require mode
+- an `export =` beside other exported elements, which is not valid TypeScript
+- syntax the consumer's TypeScript is too old to parse, such as the import attributes a `.d.cts`
+  needs to reach an ESM-typed peer
+
+So the third check writes a consumer and compiles it, across `node16` and `nodenext`, with
+`skipLibCheck` both on and off, on more than one TypeScript version. Then it `require()`s the
+entry point, because declarations can be perfect while the entry point fails to load.
+
+### Two TypeScript versions, not one
+
+The default is the floor and the current release, and both are needed. A new compiler parses
+syntax an old one rejects; an old one reports errors a new one has stopped reporting. Checking
+only the newest version misses the second kind entirely.
+
+```json
+{
+  "kurkle": {
+    "checkPackage": {
+      "typescript": ["5.3", "latest"],
+      "modes": ["node16", "nodenext"]
+    }
+  }
+}
+```
+
+`--ts` and `--modes` override those per run, and `--skip-attw`, `--skip-publint` and `--keep`
+help when narrowing down a failure. A package with no `require` entry skips the CommonJS
+consumer instead of failing it.
+
 ## Docs deploy workflow
 
 `docs-deploy.yml` is a second, separate reusable workflow that promotes a just-published

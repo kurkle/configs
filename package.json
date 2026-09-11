@@ -1,11 +1,16 @@
 {
   "author": "Jukka Kurkela",
   "bin": {
+    "kurkle-check-package": "./bin/check-package.mjs",
     "kurkle-generate-icons": "./bin/generate-icons.mjs",
     "kurkle-install-hooks": "./bin/install-hooks.mjs"
   },
   "bugs": {
     "url": "https://github.com/kurkle/configs/issues"
+  },
+  "dependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "publint": "^0.3.24"
   },
   "description": "Shared configs for projects",
   "devDependencies": {
