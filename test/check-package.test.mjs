@@ -10,6 +10,7 @@ import {
   isRunningAsMain,
   packageDir,
   parseArgs,
+  parseNpmPackOutput,
   peerSpecs,
   probeConfig,
   readManifest,
@@ -206,6 +207,43 @@ test('readManifest reads the package.json of a given directory', async () => {
   })
 })
 
+// The regression: `npm pack --json` promises stdout is exactly one JSON
+// document, but a package's `prepack` (commonly `npm run build`) runs
+// *inside* that call, and anything the build itself logs to stdout - such
+// as an earlier @kurkle/configs release of kurkle-build-cjs-types - lands
+// ahead of npm's own output. No npm flag (verified: --loglevel=silent,
+// --silent, npm_config_loglevel=silent) stops a child script's own stdout
+// from passing through, so this has to tolerate the noise rather than
+// assume it away.
+test('parseNpmPackOutput parses clean npm pack output', () => {
+  const clean = `${JSON.stringify([{ filename: 'probe-1.0.0.tgz' }])}\n`
+  assert.deepEqual(parseNpmPackOutput(clean), [{ filename: 'probe-1.0.0.tgz' }])
+})
+
+test('parseNpmPackOutput skips a build tool writing to stdout ahead of the JSON', () => {
+  const noisy = `write dist/index.d.cts\n${JSON.stringify([{ filename: 'probe-1.0.0.tgz' }])}\n`
+  assert.deepEqual(parseNpmPackOutput(noisy), [{ filename: 'probe-1.0.0.tgz' }])
+})
+
+test('parseNpmPackOutput skips several lines of noise, not just one', () => {
+  const noisy =
+    'rollup v4.0.0\nwrite dist/index.js\nwrite dist/index.d.cts\n' +
+    `${JSON.stringify([{ filename: 'probe-1.0.0.tgz' }])}\n`
+  assert.deepEqual(parseNpmPackOutput(noisy), [{ filename: 'probe-1.0.0.tgz' }])
+})
+
+test('parseNpmPackOutput is not fooled by a noise line that merely starts with "[" or "{"', () => {
+  // A line like this looks like a JSON-array start to a naive `indexOf('[')`
+  // search, but it is not valid JSON on its own - the parser has to actually
+  // try it, fail, and move on to the real start further down.
+  const noisy = `[build] compiling\n${JSON.stringify([{ filename: 'probe-1.0.0.tgz' }])}\n`
+  assert.deepEqual(parseNpmPackOutput(noisy), [{ filename: 'probe-1.0.0.tgz' }])
+})
+
+test('parseNpmPackOutput throws a clear error when there is no JSON at all', () => {
+  assert.throws(() => parseNpmPackOutput('npm ERR! something went wrong\n'), SyntaxError)
+})
+
 // The whole run, driven with a fake exec: no npm, no tsc, no node subprocess.
 // `npm install` writes the typescript manifest the way the real one would, since
 // checkPackage reads the version back out of the probe project afterwards.
@@ -302,6 +340,33 @@ test('checkPackage runs every consumer cell, plus the tools and the smoke test',
 
     const install = calls.find((call) => call.args[0] === 'install')
     assert.ok(install.args.includes('chart.js@^4.0.0'), 'required peers are installed')
+  })
+})
+
+// The regression at the checkPackage() level, not just parseNpmPackOutput()
+// in isolation: a build tool that writes to stdout ahead of npm's own JSON
+// - exactly what an earlier @kurkle/configs release of kurkle-build-cjs-types
+// did from inside a `prepack` - must not derail the run before it reaches a
+// single check.
+test('checkPackage tolerates a build tool writing to stdout ahead of npm pack --json', async () => {
+  await withProbe(async (tempRoot, resolver) => {
+    const { exec } = fakeExec()
+    const noisyExec = (command, commandArgs, options) => {
+      const result = exec(command, commandArgs, options)
+      return commandArgs[0] === 'pack' ? `write dist/index.d.cts\n${result}` : result
+    }
+
+    const rows = checkPackage({
+      exec: noisyExec,
+      log: () => {},
+      options: parseArgs(['--keep']),
+      pkg: { main: 'index.js', name: 'probe', peerDependencies: { 'chart.js': '^4.0.0' } },
+      resolver,
+      tempRoot,
+    })
+
+    assert.equal(rows.length, 19)
+    assert.ok(rows.every((row) => row.ok))
   })
 })
 

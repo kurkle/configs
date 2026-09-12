@@ -205,8 +205,15 @@ export function main() {
   const options = parseArgs(process.argv.slice(2), pkg.kurkle?.buildCjsTypes ?? {})
   const dir = resolve(process.cwd(), options.dir)
 
+  // stderr, not stdout: this command runs from a `build` script, and a
+  // `build` script commonly runs from `prepack` - which runs *inside*
+  // `npm pack --json`, whose contract is that stdout is nothing but that one
+  // JSON document. A progress line on stdout here lands ahead of the `[`
+  // and breaks every consumer of that JSON, kurkle-check-package included.
+  // stderr is the same channel rollup's own build output and npm's lifecycle
+  // banners already use, for the same reason.
   for (const name of buildCjsTypes(dir)) {
-    console.log(`write  ${join(options.dir, name)}`)
+    console.error(`write  ${join(options.dir, name)}`)
   }
 
   return 0

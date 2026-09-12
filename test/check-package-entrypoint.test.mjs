@@ -83,3 +83,40 @@ test('a package with nothing to publish still reaches the checks and fails there
     assert.match(result.stdout, /publish contract for not-publishable/)
   })
 })
+
+// The regression: `npm pack --json` is the very first thing main() does, and
+// its documented contract - stdout is exactly one JSON document - only holds
+// when nothing else writes to that same stdout first. A `prepack` script
+// (commonly `npm run build`) runs *inside* that call, and anything the
+// build logs to stdout lands ahead of npm's own `[`. An earlier
+// @kurkle/configs release of kurkle-build-cjs-types did exactly this. Before
+// the fix this failed with "error  Unexpected token 'w', ... is not valid
+// JSON" before reaching a single check; `--ts ''` keeps this fast and
+// network-free by skipping the TypeScript consumer probes (already covered
+// elsewhere), leaving attw, publint and the require() smoke test to prove
+// the run gets past `npm pack` at all.
+test('a build tool writing to stdout during prepack does not break the JSON parse', async () => {
+  await withTempDir(async (dir) => {
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        main: 'index.js',
+        name: 'noisy-build-probe',
+        private: false,
+        scripts: { prepack: 'node -e "console.log(\'write dist/index.d.cts\')"' },
+        version: '1.0.0',
+      })
+    )
+    await writeFile(path.join(dir, 'index.js'), 'module.exports = {}\n')
+
+    const result = spawnSync(process.execPath, [scriptPath, '--ts', ''], {
+      cwd: dir,
+      encoding: 'utf8',
+    })
+
+    assert.doesNotMatch(result.stderr, /Unexpected token/)
+    assert.match(result.stdout, /publish contract for noisy-build-probe/)
+    assert.match(result.stdout, /ok {4}attw/)
+    assert.match(result.stdout, /ok {4}publint/)
+  })
+})
