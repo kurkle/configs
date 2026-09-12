@@ -105,6 +105,55 @@ test('running through the symlink against a real directory writes the .d.cts twi
     })
 
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /write {2}types[/\\]index\.d\.cts/)
+    // Progress goes to stderr, not stdout: this command commonly runs from a
+    // `build` script invoked by `prepack`, which itself runs inside
+    // `npm pack --json` - a caller (kurkle-check-package included) whose
+    // entire contract for stdout is "nothing but that one JSON document".
+    // See the regression test below for the incident this guards.
+    assert.match(result.stderr, /write {2}types[/\\]index\.d\.cts/)
+    assert.equal(result.stdout, '')
+  })
+})
+
+// The actual incident: kurkle-build-cjs-types wrote its progress to stdout,
+// and when a repository's `build` script (which commonly runs from
+// `prepack`) called it, that line landed ahead of the `[` that
+// `npm pack --json` was about to print - breaking every caller of that JSON,
+// kurkle-check-package included, with "Unexpected token 'w', ... is not
+// valid JSON". This is the exact scenario, one level up: prepack calling
+// this command directly, and stdout has to be silent on success for that to
+// be safe.
+test('running through the symlink writes nothing to stdout on success, only to stderr', async () => {
+  await withTempDir(async (dir) => {
+    const binDir = path.join(dir, 'node_modules', '.bin')
+    await mkdir(binDir, { recursive: true })
+    const symlinkPath = path.join(binDir, 'kurkle-build-cjs-types')
+    await symlink(scriptPath, symlinkPath)
+
+    await writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'probe',
+        private: false,
+        scripts: { prepack: `node ${JSON.stringify(symlinkPath)}` },
+        version: '1.0.0',
+      })
+    )
+    await mkdir(path.join(dir, 'dist'))
+    await writeFile(path.join(dir, 'dist', 'index.d.ts'), 'export declare class Controller {}\n')
+
+    // The real reproduction: run it exactly the way check-package does,
+    // through npm pack --json, and prove the JSON that comes back is still
+    // parseable.
+    const result = spawnSync('npm', ['pack', '--json', '--pack-destination', dir], {
+      cwd: dir,
+      encoding: 'utf8',
+    })
+
+    assert.equal(result.status, 0, result.stderr)
+    assert.doesNotThrow(
+      () => JSON.parse(result.stdout),
+      `stdout was not valid JSON:\n${result.stdout}`
+    )
   })
 })

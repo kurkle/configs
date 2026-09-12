@@ -75,6 +75,38 @@ export function parseArgs(argv, config = {}) {
 export const readManifest = (dir = process.cwd()) =>
   JSON.parse(readFileSync(resolve(dir, 'package.json'), 'utf8'))
 
+// `npm pack --json` documents its stdout as exactly one JSON array - but
+// that promise only holds when nothing else writes to the same stdout
+// first. Its `prepack` (commonly `npm run build`) runs *inside* this call,
+// and anything that build logs to stdout - webpack does by default, a
+// misconfigured or buggy build step can always add more - lands ahead of
+// npm's own `[`. No npm flag changes this: `--loglevel=silent`, `--silent`
+// and `npm_config_loglevel=silent` all still let a build's own stdout
+// through, because that fd is inherited directly rather than filtered by
+// npm's own logger. So this does not trust the whole stream is JSON; it
+// looks for where a JSON value actually starts.
+//
+// Every line beginning `[` or `{` is a candidate, tried in the order they
+// appear and kept only if the remainder from there on actually parses -
+// which npm's own output always does, being the last thing printed. A
+// build tool's own noise might itself contain a line starting with one of
+// those characters without being JSON (a log line reading "[build] done",
+// say); such a line fails to parse as a complete document and is skipped
+// rather than trusted just because it matched the character.
+export function parseNpmPackOutput(output) {
+  const starts = [...output.matchAll(/^[[{]/gm)].map((match) => match.index)
+
+  for (const at of starts) {
+    try {
+      return JSON.parse(output.slice(at))
+    } catch {
+      // Not the real start - keep looking.
+    }
+  }
+
+  throw new SyntaxError(`no JSON array or object found in npm pack output:\n${output}`)
+}
+
 // `main` is the node10 entry point, so a package with one is requireable even
 // when its `exports` map says nothing about `require`.
 export function hasRequireEntry(pkg) {
@@ -222,7 +254,7 @@ export function checkPackage({
   log(`  node ${process.version}, typescript ${options.versions.join(', ')}`)
 
   const packed = exec('npm', ['pack', '--json', '--pack-destination', tempRoot])
-  const tarball = join(tempRoot, JSON.parse(packed)[0].filename)
+  const tarball = join(tempRoot, parseNpmPackOutput(packed)[0].filename)
 
   if (!options.skipAttw) {
     record(
