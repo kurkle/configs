@@ -1,6 +1,7 @@
 {
   "author": "Jukka Kurkela",
   "bin": {
+    "kurkle-build-cjs-types": "./bin/build-cjs-types.mjs",
     "kurkle-check-package": "./bin/check-package.mjs",
     "kurkle-generate-icons": "./bin/generate-icons.mjs",
     "kurkle-install-hooks": "./bin/install-hooks.mjs"

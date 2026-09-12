@@ -143,6 +143,64 @@ only the newest version misses the second kind entirely.
 help when narrowing down a failure. A package with no `require` entry skips the CommonJS
 consumer instead of failing it.
 
+## CommonJS type declarations
+
+```bash
+npx kurkle-build-cjs-types
+```
+
+For a package whose `exports.require` condition serves a UMD bundle under a `.cjs` name:
+`tsc` only ever emits ESM (`.d.ts`) declarations, so the require condition has nothing of its
+own to point at. This duplicates every `.d.ts` in a directory as a `.d.cts` twin, with four
+rewrites that make the copy **compile** for a consumer rather than merely resolve:
+
+1. Relative specifiers are rewritten to their `.cjs` counterparts, so a `.d.cts` resolves
+   `./x.cjs` to `./x.d.cts` instead of the ESM `./x.d.ts`.
+2. A default export becomes `export =`, and — because `export =` may not stand beside other
+   exports (TS2309) — any named types move into a namespace merged with the exported value. A
+   no-op when the source has no default export, which is what lets one generator handle a
+   plugin (default export) and a chart type (none) alike.
+3. Imports of a package whose own types are ESM (e.g. `chart.js`) become type-only and carry a
+   `resolution-mode` attribute — legal only on a type-only import; a value import would need
+   `--module` to be esnext, node18, node20, nodenext or preserve, and `node16` is none of those
+   (TS2823).
+4. A `declare module` augmentation is dropped and re-imported from the ESM twin of the same
+   file, because it resolves its own specifier in the enclosing file's mode and no attribute
+   syntax can override that.
+
+Without 2–4 the package still passes `attw` and `publint` — they check how a specifier
+resolves, not whether the result compiles — and still fails to build for a consumer with
+`skipLibCheck: false`.
+
+Wire it into the build, after the step that emits declarations:
+
+```json
+{
+  "scripts": {
+    "build": "rollup -c && tsc -p tsconfig.json --emitDeclarationOnly && kurkle-build-cjs-types"
+  }
+}
+```
+
+Options:
+
+| Flag | Default | Purpose |
+| --- | --- | --- |
+| `--dir <path>` | `dist` | Directory holding the emitted `.d.ts` files, and where the `.d.cts` twins are written. |
+| `--help` | — | Print usage and exit without generating anything. |
+
+`--dir` can also be set once in `package.json`:
+
+```json
+{
+  "kurkle": {
+    "buildCjsTypes": {
+      "dir": "types"
+    }
+  }
+}
+```
+
 ## Docs deploy workflow
 
 `docs-deploy.yml` is a second, separate reusable workflow that promotes a just-published
