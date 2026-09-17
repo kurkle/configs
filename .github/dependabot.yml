@@ -5,12 +5,18 @@ updates:
     schedule:
       interval: "weekly"
     groups:
+      # Reviewing majors one at a time keeps a single blocked major from
+      # stalling every patch grouped beside it.
       dev-dependencies:
         dependency-type: "development"
+        update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
     groups:
+      # Reviewing majors one at a time keeps a single blocked major from
+      # stalling every patch grouped beside it.
       actions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
