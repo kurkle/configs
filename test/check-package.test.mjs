@@ -9,6 +9,7 @@ import {
   hasRequireEntry,
   isRunningAsMain,
   packageDir,
+  packedFilename,
   parseArgs,
   parseNpmPackOutput,
   peerSpecs,
@@ -240,6 +241,57 @@ test('parseNpmPackOutput is not fooled by a noise line that merely starts with "
   assert.deepEqual(parseNpmPackOutput(noisy), [{ filename: 'probe-1.0.0.tgz' }])
 })
 
+// npm 12 prints an object keyed by package name instead of npm 11's array.
+// Keys measured with npm 12.2.2: `probe` and, for a scoped package,
+// `@kurkle/probe`.
+const npm12 = (name) =>
+  JSON.stringify(
+    { [name]: { filename: `${name.replace('@', '').replace('/', '-')}-1.0.0.tgz` } },
+    null,
+    2
+  )
+
+test('parseNpmPackOutput parses the npm 12 object shape, with and without noise', () => {
+  assert.deepEqual(parseNpmPackOutput(`${npm12('probe')}\n`), {
+    probe: { filename: 'probe-1.0.0.tgz' },
+  })
+  assert.deepEqual(parseNpmPackOutput(`write dist/index.d.cts\n${npm12('probe')}\n`), {
+    probe: { filename: 'probe-1.0.0.tgz' },
+  })
+})
+
+test('parseNpmPackOutput is not fooled by noise starting with "{" ahead of an object payload', () => {
+  const noisy = `{ "building": true\n{not json}\n${npm12('@kurkle/probe')}\n`
+  assert.deepEqual(parseNpmPackOutput(noisy), {
+    '@kurkle/probe': { filename: 'kurkle-probe-1.0.0.tgz' },
+  })
+})
+
+test('packedFilename reads the npm 11 array shape', () => {
+  assert.equal(packedFilename([{ filename: 'probe-1.0.0.tgz' }]), 'probe-1.0.0.tgz')
+})
+
+test('packedFilename reads the npm 12 object shape, scoped or not', () => {
+  assert.equal(packedFilename(JSON.parse(npm12('probe'))), 'probe-1.0.0.tgz')
+  assert.equal(packedFilename(JSON.parse(npm12('@kurkle/probe'))), 'kurkle-probe-1.0.0.tgz')
+})
+
+test('packedFilename refuses output that is not exactly one entry with a filename', () => {
+  assert.throws(() => packedFilename([]), /exactly one entry.*got 0/s)
+  assert.throws(() => packedFilename({}), /exactly one entry.*got 0/s)
+  assert.throws(() => packedFilename(null), /exactly one entry/)
+  assert.throws(
+    () => packedFilename([{ filename: 'a.tgz' }, { filename: 'b.tgz' }]),
+    /exactly one entry.*got 2/s
+  )
+  assert.throws(
+    () => packedFilename({ a: { filename: 'a.tgz' }, b: { filename: 'b.tgz' } }),
+    /exactly one entry.*got 2/s
+  )
+  assert.throws(() => packedFilename([{ name: 'probe' }]), /no filename/)
+  assert.throws(() => packedFilename({ probe: {} }), /no filename/)
+})
+
 test('parseNpmPackOutput throws a clear error when there is no JSON at all', () => {
   assert.throws(() => parseNpmPackOutput('npm ERR! something went wrong\n'), SyntaxError)
 })
@@ -358,6 +410,28 @@ test('checkPackage tolerates a build tool writing to stdout ahead of npm pack --
 
     const rows = checkPackage({
       exec: noisyExec,
+      log: () => {},
+      options: parseArgs(['--keep']),
+      pkg: { main: 'index.js', name: 'probe', peerDependencies: { 'chart.js': '^4.0.0' } },
+      resolver,
+      tempRoot,
+    })
+
+    assert.equal(rows.length, 19)
+    assert.ok(rows.every((row) => row.ok))
+  })
+})
+
+test('checkPackage runs against the npm 12 pack output shape', async () => {
+  await withProbe(async (tempRoot, resolver) => {
+    const { exec } = fakeExec()
+    const npm12Exec = (command, commandArgs, options) => {
+      const result = exec(command, commandArgs, options)
+      return commandArgs[0] === 'pack' ? npm12('probe') : result
+    }
+
+    const rows = checkPackage({
+      exec: npm12Exec,
       log: () => {},
       options: parseArgs(['--keep']),
       pkg: { main: 'index.js', name: 'probe', peerDependencies: { 'chart.js': '^4.0.0' } },

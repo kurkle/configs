@@ -75,12 +75,12 @@ export function parseArgs(argv, config = {}) {
 export const readManifest = (dir = process.cwd()) =>
   JSON.parse(readFileSync(resolve(dir, 'package.json'), 'utf8'))
 
-// `npm pack --json` documents its stdout as exactly one JSON array - but
+// `npm pack --json` documents its stdout as exactly one JSON value - but
 // that promise only holds when nothing else writes to the same stdout
 // first. Its `prepack` (commonly `npm run build`) runs *inside* this call,
 // and anything that build logs to stdout - webpack does by default, a
 // misconfigured or buggy build step can always add more - lands ahead of
-// npm's own `[`. No npm flag changes this: `--loglevel=silent`, `--silent`
+// npm's own `[` (npm 11) or `{` (npm 12). No npm flag changes this: `--loglevel=silent`, `--silent`
 // and `npm_config_loglevel=silent` all still let a build's own stdout
 // through, because that fd is inherited directly rather than filtered by
 // npm's own logger. So this does not trust the whole stream is JSON; it
@@ -105,6 +105,35 @@ export function parseNpmPackOutput(output) {
   }
 
   throw new SyntaxError(`no JSON array or object found in npm pack output:\n${output}`)
+}
+
+// The shape of `npm pack --json` differs between npm majors: npm 11 and
+// older print an array with one entry per packed package, npm 12 prints an
+// object keyed by package name (`@scope/name` for a scoped one) with the same
+// entry as the value. Which one runs depends on the npm that resolves first
+// from an npm script, i.e. a `node_modules/.bin/npm` pulled in by
+// semantic-release 26, not on the runner's own npm. Either way a
+// single-package pack has exactly one entry; anything else is refused rather
+// than guessed at.
+export function packedFilename(parsed) {
+  const entries = Array.isArray(parsed)
+    ? parsed
+    : parsed !== null && typeof parsed === 'object'
+      ? Object.values(parsed)
+      : []
+
+  if (entries.length !== 1) {
+    throw new Error(
+      `expected exactly one entry in npm pack output, got ${entries.length}:\n${JSON.stringify(parsed)}`
+    )
+  }
+
+  const filename = entries[0]?.filename
+  if (typeof filename !== 'string' || filename === '') {
+    throw new Error(`npm pack output has no filename:\n${JSON.stringify(parsed)}`)
+  }
+
+  return filename
 }
 
 // `main` is the node10 entry point, so a package with one is requireable even
@@ -254,7 +283,7 @@ export function checkPackage({
   log(`  node ${process.version}, typescript ${options.versions.join(', ')}`)
 
   const packed = exec('npm', ['pack', '--json', '--pack-destination', tempRoot])
-  const tarball = join(tempRoot, parseNpmPackOutput(packed)[0].filename)
+  const tarball = join(tempRoot, packedFilename(parseNpmPackOutput(packed)))
 
   if (!options.skipAttw) {
     record(

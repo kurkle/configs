@@ -64,7 +64,7 @@ test('kurkle-build-cjs-types and kurkle-check-package work together in one real 
 
     // The exact failure mode this regresses: a JSON parse error surfacing
     // before any check ran, because kurkle-build-cjs-types' own progress
-    // line was still sitting on stdout ahead of npm pack's `[`.
+    // line was still sitting on stdout ahead of npm pack's JSON.
     assert.doesNotMatch(result.stderr, /Unexpected token/)
     assert.doesNotMatch(result.stdout, /Unexpected token/)
     assert.match(result.stdout, /publish contract for compat-probe/)
