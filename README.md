@@ -274,7 +274,7 @@ Copies `commit-msg` (semantic commit subject check) and `pre-commit` into `.gith
 }
 ```
 
-The `pre-commit` hook runs lint, test, typecheck, build and docs with `--if-present`, so the same
+The `pre-commit` hook runs lint, typecheck, build, test and docs with `--if-present` (in CI order, so tests see the fresh build), so the same
 hook works in every repository regardless of which scripts it defines.
 
 ## Icons
