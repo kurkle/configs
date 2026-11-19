@@ -25,7 +25,7 @@ on:
         description: Node.js version used for every job.
         required: false
         type: string
-        default: '24'
+        default: '26'
       install-command:
         description: >-
           Command that installs dependencies. Defaults to skipping dependency
