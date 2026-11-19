@@ -208,7 +208,7 @@ export function main() {
   // stderr, not stdout: this command runs from a `build` script, and a
   // `build` script commonly runs from `prepack` - which runs *inside*
   // `npm pack --json`, whose contract is that stdout is nothing but that one
-  // JSON document. A progress line on stdout here lands ahead of the `[`
+  // JSON document. A progress line on stdout here lands ahead of the JSON
   // and breaks every consumer of that JSON, kurkle-check-package included.
   // stderr is the same channel rollup's own build output and npm's lifecycle
   // banners already use, for the same reason.

@@ -117,7 +117,7 @@ test('running through the symlink against a real directory writes the .d.cts twi
 
 // The actual incident: kurkle-build-cjs-types wrote its progress to stdout,
 // and when a repository's `build` script (which commonly runs from
-// `prepack`) called it, that line landed ahead of the `[` that
+// `prepack`) called it, that line landed ahead of the JSON that
 // `npm pack --json` was about to print - breaking every caller of that JSON,
 // kurkle-check-package included, with "Unexpected token 'w', ... is not
 // valid JSON". This is the exact scenario, one level up: prepack calling
